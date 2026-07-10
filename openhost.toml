@@ -1,0 +1,27 @@
+[app]
+name = "limesurvey"
+version = "0.1.0"
+description = "LimeSurvey survey platform (github.com/LimeSurvey/LimeSurvey) with bundled MariaDB"
+
+[runtime.container]
+image = "Dockerfile"
+port = 8080
+
+[routing]
+health_check = "/health.php"
+# Public so anonymous respondents can take surveys. The admin panel is
+# protected by LimeSurvey's own auth: the owner is logged in automatically via
+# the router's X-OpenHost-Is-Owner header (which the router strips from client
+# requests, so it can't be spoofed); everyone else gets a login form.
+public_paths = ["/"]
+
+[resources]
+memory_mb = 1024
+cpu_millicores = 1000
+
+[data]
+app_data = true
+
+[[links]]
+name = "admin"
+path = "/index.php/admin"
