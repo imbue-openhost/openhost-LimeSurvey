@@ -103,6 +103,14 @@ SetEnvIf X-OpenHost-Is-Owner "^true$" OPENHOST_SSO_USER=$ADMIN_USER
 RewriteEngine On
 RewriteCond %{HTTP:X-OpenHost-Is-Owner} =true
 RewriteRule ^/$ $EXTERNAL_URL/index.php/admin [R=302,L]
+
+# LimeSurvey's REST API (used by the new survey editor) looks up
+# getallheaders()['Authorization'] case-sensitively, but the router forwards
+# header names lowercase, so the editor's bearer token was invisible and every
+# /rest call 401'd. Re-add the header with canonical casing.
+SetEnvIf Authorization "(.+)" OPENHOST_RAW_AUTH=\$1
+RequestHeader unset Authorization
+RequestHeader set Authorization "%{OPENHOST_RAW_AUTH}e" env=OPENHOST_RAW_AUTH
 EOF
 
 # Provision LimeSurvey settings once the schema exists (the installer runs

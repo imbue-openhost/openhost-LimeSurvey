@@ -138,6 +138,41 @@ def test_site_contact_is_seeded(stack: OpenhostStack) -> None:
     assert stack.owner_username in resp.text
 
 
+def test_editor_rest_api_works_through_router(stack: OpenhostStack) -> None:
+    """The new survey editor authenticates /rest calls with a bearer token
+    minted via editorLink (LS_AUTH_INIT cookie). LimeSurvey reads the
+    Authorization header case-sensitively while the router lowercases header
+    names, so without the Apache re-casing fix every /rest call 401s and the
+    editor hangs on "Checking permissions"."""
+    import json
+    from urllib.parse import unquote
+
+    _wait_for_sso_provisioning(stack)
+
+    sess = requests.Session()
+    resp = _get_following_redirects(sess, stack, stack.url, "/index.php/admin")
+    assert resp.status_code == 200
+
+    link = sess.get(
+        stack.url + "/index.php/editorLink/index?route=survey%2F1",
+        allow_redirects=False,
+        timeout=30,
+    )
+    raw = link.cookies.get("LS_AUTH_INIT")
+    assert raw, "editorLink did not set the LS_AUTH_INIT token cookie"
+    token = json.loads(unquote(raw))["token"]
+
+    rest = requests.get(
+        stack.url + "/rest/v1/user-permissions",
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=30,
+    )
+    assert rest.status_code == 200, (
+        f"editor REST call failed through the router: {rest.status_code}"
+    )
+    assert "permissions" in rest.json()
+
+
 def test_anonymous_password_login_still_works(stack: OpenhostStack) -> None:
     """The generated credentials remain a fallback (Authwebserver is not the
     default auth method), e.g. for additional admin users."""
