@@ -106,6 +106,29 @@ def test_owner_is_autologged_into_admin(stack: OpenhostStack, browser: Browser) 
         context.close()
 
 
+def test_owner_root_redirects_to_admin(stack: OpenhostStack) -> None:
+    """The app root is the confusing public survey list — the owner should be
+    taken to the admin dashboard instead."""
+    _wait_for_sso_provisioning(stack)
+
+    resp = _get_following_redirects(requests.Session(), stack, stack.url, "/")
+    assert resp.status_code == 200
+    assert "/dashboard/" in resp.url, f"owner did not land on the dashboard: {resp.url}"
+    assert 'name="password"' not in resp.text
+
+
+def test_site_contact_is_seeded(stack: OpenhostStack) -> None:
+    """The empty public survey list shows the site contact; the provisioner
+    replaces LimeSurvey's placeholder with the owner's name/email."""
+    _wait_for_sso_provisioning(stack)  # same provisioning pass seeds the contact
+
+    resp = _get_following_redirects(requests.Session(), stack, stack.app_url, "/")
+    assert resp.status_code == 200
+    assert "your-email@example.net" not in resp.text, "placeholder email still showing"
+    assert "Your Name" not in resp.text, "placeholder site admin name still showing"
+    assert stack.owner_username in resp.text
+
+
 def test_anonymous_password_login_still_works(stack: OpenhostStack) -> None:
     """The generated credentials remain a fallback (Authwebserver is not the
     default auth method), e.g. for additional admin users."""

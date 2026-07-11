@@ -74,18 +74,42 @@ ln -sfn "$DATA_DIR/config/security.php" "$WEBROOT/application/config/security.ph
 # public URL correct across app renames).
 rm -f "$WEBROOT/application/config/config.php"
 
+# --- Env for the upstream entrypoint (config generation + auto-install) ---
+EXTERNAL_URL="https://${OPENHOST_APP_NAME:-limesurvey}.${OPENHOST_ZONE_DOMAIN:-localhost}"
+
+export DB_TYPE=mysql DB_HOST=127.0.0.1 DB_PORT=3306
+export DB_NAME=limesurvey DB_USERNAME=limesurvey
+export DB_PASSWORD_FILE="$SECRETS_DIR/db_password"
+export DB_MYSQL_ENGINE=InnoDB
+export ADMIN_USER="${OPENHOST_OWNER_USERNAME:-admin}"
+export ADMIN_NAME="${OPENHOST_OWNER_USERNAME:-admin}"
+export ADMIN_EMAIL="${ADMIN_EMAIL:-${OPENHOST_OWNER_USERNAME:-owner}@${OPENHOST_ZONE_DOMAIN:-localhost}}"
+export ADMIN_PASSWORD_FILE="$SECRETS_DIR/admin_password"
+export PUBLIC_URL="$EXTERNAL_URL"
+export HOST_INFO="$EXTERNAL_URL"
+export LISTEN_PORT=8080
+
 # --- Owner SSO: map the router's owner header to a server variable for the
 # Authwebserver plugin. The router strips X-OpenHost-Is-Owner from client
 # requests (it is the sole authority), so this cannot be spoofed.
-SSO_USER="${OPENHOST_OWNER_USERNAME:-admin}"
 cat > /etc/apache2/conf-enabled/openhost-sso.conf <<EOF
-SetEnvIf X-OpenHost-Is-Owner "^true$" OPENHOST_SSO_USER=$SSO_USER
+SetEnvIf X-OpenHost-Is-Owner "^true$" OPENHOST_SSO_USER=$ADMIN_USER
+
+# Send the owner from the app root to the admin panel (SSO logs them in);
+# anonymous respondents still get the public survey pages.
+RewriteEngine On
+RewriteCond %{HTTP:X-OpenHost-Is-Owner} =true
+RewriteRule ^/$ /index.php/admin [R=302,L]
 EOF
 
-# Activate + configure the Authwebserver plugin once the LimeSurvey schema
-# exists (the installer runs after apache starts, so poll in the background).
-# is_default=false keeps password login as fallback when the header is absent.
-provision_sso() {
+# Provision LimeSurvey settings once the schema exists (the installer runs
+# after apache starts, so poll in the background):
+# - Activate + configure the Authwebserver plugin for owner SSO.
+#   is_default=false keeps password login as fallback when the header is absent.
+# - Seed the site contact (shown on public pages) in place of LimeSurvey's
+#   "Your Name (your-email@example.net)" placeholder. Only missing rows and
+#   untouched placeholders are written, so UI edits stick.
+provision_limesurvey() {
     for _ in $(seq 1 300); do
         if mariadb --socket="$SOCK" limesurvey -N -e "SELECT 1 FROM lime_plugins LIMIT 1" > /dev/null 2>&1; then
             mariadb --socket="$SOCK" limesurvey <<'SQL'
@@ -101,29 +125,31 @@ INSERT INTO lime_plugin_settings (plugin_id, `key`, value)
 INSERT INTO lime_plugin_settings (plugin_id, `key`, value)
     SELECT id, 'is_default', 'false' FROM lime_plugins WHERE name = 'Authwebserver';
 SQL
-            echo "Info: Authwebserver owner SSO provisioned"
+            mariadb --socket="$SOCK" limesurvey <<SQL
+INSERT INTO lime_settings_global (stg_name, stg_value)
+SELECT 'siteadminname', '$ADMIN_USER'
+WHERE NOT EXISTS (SELECT 1 FROM lime_settings_global WHERE stg_name = 'siteadminname');
+UPDATE lime_settings_global SET stg_value = '$ADMIN_USER'
+    WHERE stg_name = 'siteadminname' AND stg_value = 'Your Name';
+INSERT INTO lime_settings_global (stg_name, stg_value)
+SELECT 'siteadminemail', '$ADMIN_EMAIL'
+WHERE NOT EXISTS (SELECT 1 FROM lime_settings_global WHERE stg_name = 'siteadminemail');
+UPDATE lime_settings_global SET stg_value = '$ADMIN_EMAIL'
+    WHERE stg_name = 'siteadminemail' AND stg_value = 'your-email@example.net';
+INSERT INTO lime_settings_global (stg_name, stg_value)
+SELECT 'siteadminbounce', '$ADMIN_EMAIL'
+WHERE NOT EXISTS (SELECT 1 FROM lime_settings_global WHERE stg_name = 'siteadminbounce');
+UPDATE lime_settings_global SET stg_value = '$ADMIN_EMAIL'
+    WHERE stg_name = 'siteadminbounce' AND stg_value = 'your-email@example.net';
+SQL
+            echo "Info: LimeSurvey provisioned (owner SSO + site contact)"
             return 0
         fi
         sleep 2
     done
-    echo "Warning: timed out waiting for LimeSurvey schema; owner SSO not provisioned" >&2
+    echo "Warning: timed out waiting for LimeSurvey schema; SSO/site contact not provisioned" >&2
 }
-provision_sso &
-
-# --- Env for the upstream entrypoint (config generation + auto-install) ---
-EXTERNAL_URL="https://${OPENHOST_APP_NAME:-limesurvey}.${OPENHOST_ZONE_DOMAIN:-localhost}"
-
-export DB_TYPE=mysql DB_HOST=127.0.0.1 DB_PORT=3306
-export DB_NAME=limesurvey DB_USERNAME=limesurvey
-export DB_PASSWORD_FILE="$SECRETS_DIR/db_password"
-export DB_MYSQL_ENGINE=InnoDB
-export ADMIN_USER="${OPENHOST_OWNER_USERNAME:-admin}"
-export ADMIN_NAME="${OPENHOST_OWNER_USERNAME:-admin}"
-export ADMIN_EMAIL="${ADMIN_EMAIL:-${OPENHOST_OWNER_USERNAME:-owner}@${OPENHOST_ZONE_DOMAIN:-localhost}}"
-export ADMIN_PASSWORD_FILE="$SECRETS_DIR/admin_password"
-export PUBLIC_URL="$EXTERNAL_URL"
-export HOST_INFO="$EXTERNAL_URL"
-export LISTEN_PORT=8080
+provision_limesurvey &
 
 setpriv --reuid=www-data --regid=www-data --init-groups \
     /usr/local/bin/entrypoint.sh "$@" &

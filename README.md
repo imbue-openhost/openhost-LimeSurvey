@@ -23,7 +23,8 @@ surveys. The admin panel at `/index.php/admin` (also linked from the app's
 dashboard page) is protected by LimeSurvey's own auth, with owner SSO on top:
 
 - **Owner:** logged into OpenHost, you are signed into the admin panel
-  automatically — no LimeSurvey login. This works via LimeSurvey's built-in
+  automatically — no LimeSurvey login — and the app root redirects you to the
+  admin dashboard (anonymous visitors get the public survey pages there). This works via LimeSurvey's built-in
   `Authwebserver` plugin: the router adds `X-OpenHost-Is-Owner: true` to your
   requests (and strips that header from everyone else's, so it can't be
   spoofed), and Apache maps it to the `OPENHOST_SSO_USER` variable the plugin
