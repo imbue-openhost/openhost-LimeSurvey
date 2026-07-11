@@ -96,10 +96,13 @@ cat > /etc/apache2/conf-enabled/openhost-sso.conf <<EOF
 SetEnvIf X-OpenHost-Is-Owner "^true$" OPENHOST_SSO_USER=$ADMIN_USER
 
 # Send the owner from the app root to the admin panel (SSO logs them in);
-# anonymous respondents still get the public survey pages.
+# anonymous respondents still get the public survey pages. The target must be
+# the absolute external URL: the router forwards with an internal Host header
+# and does not rewrite Location, so a path-only target would redirect the
+# browser to 127.0.0.1.
 RewriteEngine On
 RewriteCond %{HTTP:X-OpenHost-Is-Owner} =true
-RewriteRule ^/$ /index.php/admin [R=302,L]
+RewriteRule ^/$ $EXTERNAL_URL/index.php/admin [R=302,L]
 EOF
 
 # Provision LimeSurvey settings once the schema exists (the installer runs

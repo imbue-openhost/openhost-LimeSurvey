@@ -111,6 +111,15 @@ def test_owner_root_redirects_to_admin(stack: OpenhostStack) -> None:
     taken to the admin dashboard instead."""
     _wait_for_sso_provisioning(stack)
 
+    # The Location must be the absolute external origin — the router forwards
+    # with an internal Host header and doesn't rewrite Location, so anything
+    # Host-derived would send the browser to 127.0.0.1.
+    hop = requests.get(stack.url + "/", allow_redirects=False, timeout=30)
+    assert hop.status_code == 302
+    assert hop.headers["Location"] == _external_origin(stack) + "/index.php/admin", (
+        f"redirect leaks an internal origin: {hop.headers['Location']}"
+    )
+
     resp = _get_following_redirects(requests.Session(), stack, stack.url, "/")
     assert resp.status_code == 200
     assert "/dashboard/" in resp.url, f"owner did not land on the dashboard: {resp.url}"
