@@ -116,12 +116,28 @@ RequestHeader set Authorization "%{OPENHOST_RAW_AUTH}e" env=OPENHOST_RAW_AUTH
 # The new survey editor's REST backend (SurveyTemplate command) renders the
 # survey preview by self-requesting a URL it builds from \$_SERVER['HTTPS'] and
 # HTTP_HOST, ignoring LimeSurvey's configured hostInfo. Behind the router those
-# are the internal 127.0.0.1:<port> over plain http, so the editor's rendered
-# links (e.g. the top-left home button) point at http://127.0.0.1:<port>/.
-# Present the request to PHP as the external https origin so any code that reads
-# the raw request host/scheme (not just createUrl/hostInfo) builds correct URLs.
+# are the internal 127.0.0.1:<port> over plain http, so that self-request (and
+# any absolute URL such code embeds in a response body) would target the
+# unreachable internal host. Present the request to PHP as the external https
+# origin so any code that reads the raw request host/scheme (not just
+# createUrl/hostInfo) builds correct, reachable URLs.
 RequestHeader set Host "$EXTERNAL_HOST"
 SetEnv HTTPS on
+
+# The editor's top-left "home" link points at /admin, which is a real directory
+# in the webroot. Apache's mod_dir answers a slash-less directory request with a
+# trailing-slash redirect (/admin -> /admin/) built from r->hostname + the
+# connection scheme -- behind the router the internal 127.0.0.1:<port> over http
+# -- so the browser is sent to http://127.0.0.1:<port>/admin/, which does not
+# resolve. RequestHeader/hostInfo can't help (mod_dir uses r->hostname, not
+# HTTP_HOST) and mod_headers can't rewrite a redirect's Location (mod_dir sets it
+# on a 3xx, which the onsuccess table skips and the always table can't reach).
+# Disable the trailing-slash redirect so these directories are served via their
+# DirectoryIndex instead; keep Indexes off so this can't expose a listing.
+<Directory /var/www/html>
+    DirectorySlash Off
+    Options -Indexes
+</Directory>
 EOF
 
 # Provision LimeSurvey settings once the schema exists (the installer runs
