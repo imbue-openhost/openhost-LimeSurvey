@@ -75,7 +75,8 @@ ln -sfn "$DATA_DIR/config/security.php" "$WEBROOT/application/config/security.ph
 rm -f "$WEBROOT/application/config/config.php"
 
 # --- Env for the upstream entrypoint (config generation + auto-install) ---
-EXTERNAL_URL="https://${OPENHOST_APP_NAME:-limesurvey}.${OPENHOST_ZONE_DOMAIN:-localhost}"
+EXTERNAL_HOST="${OPENHOST_APP_NAME:-limesurvey}.${OPENHOST_ZONE_DOMAIN:-localhost}"
+EXTERNAL_URL="https://$EXTERNAL_HOST"
 
 export DB_TYPE=mysql DB_HOST=127.0.0.1 DB_PORT=3306
 export DB_NAME=limesurvey DB_USERNAME=limesurvey
@@ -111,6 +112,16 @@ RewriteRule ^/$ $EXTERNAL_URL/index.php/admin [R=302,L]
 SetEnvIf Authorization "(.+)" OPENHOST_RAW_AUTH=\$1
 RequestHeader unset Authorization
 RequestHeader set Authorization "%{OPENHOST_RAW_AUTH}e" env=OPENHOST_RAW_AUTH
+
+# The new survey editor's REST backend (SurveyTemplate command) renders the
+# survey preview by self-requesting a URL it builds from \$_SERVER['HTTPS'] and
+# HTTP_HOST, ignoring LimeSurvey's configured hostInfo. Behind the router those
+# are the internal 127.0.0.1:<port> over plain http, so the editor's rendered
+# links (e.g. the top-left home button) point at http://127.0.0.1:<port>/.
+# Present the request to PHP as the external https origin so any code that reads
+# the raw request host/scheme (not just createUrl/hostInfo) builds correct URLs.
+RequestHeader set Host "$EXTERNAL_HOST"
+SetEnv HTTPS on
 EOF
 
 # Provision LimeSurvey settings once the schema exists (the installer runs
