@@ -75,7 +75,8 @@ ln -sfn "$DATA_DIR/config/security.php" "$WEBROOT/application/config/security.ph
 rm -f "$WEBROOT/application/config/config.php"
 
 # --- Env for the upstream entrypoint (config generation + auto-install) ---
-EXTERNAL_URL="https://${OPENHOST_APP_NAME:-limesurvey}.${OPENHOST_ZONE_DOMAIN:-localhost}"
+EXTERNAL_HOST="${OPENHOST_APP_NAME:-limesurvey}.${OPENHOST_ZONE_DOMAIN:-localhost}"
+EXTERNAL_URL="https://$EXTERNAL_HOST"
 
 export DB_TYPE=mysql DB_HOST=127.0.0.1 DB_PORT=3306
 export DB_NAME=limesurvey DB_USERNAME=limesurvey
@@ -111,6 +112,21 @@ RewriteRule ^/$ $EXTERNAL_URL/index.php/admin [R=302,L]
 SetEnvIf Authorization "(.+)" OPENHOST_RAW_AUTH=\$1
 RequestHeader unset Authorization
 RequestHeader set Authorization "%{OPENHOST_RAW_AUTH}e" env=OPENHOST_RAW_AUTH
+
+# Make PHP see the external https origin. Some editor code builds absolute URLs
+# from \$_SERVER['HTTPS'] + HTTP_HOST instead of hostInfo, which behind the
+# router are the unreachable internal 127.0.0.1:<port> over http.
+RequestHeader set Host "$EXTERNAL_HOST"
+SetEnv HTTPS on
+
+# Fix the editor's broken /admin home link: /admin is a real directory, so
+# mod_dir 301s it to /admin/ using the internal host, sending the browser to
+# http://127.0.0.1:<port>/admin/. Serve directories via their DirectoryIndex
+# instead of redirecting (Indexes off so this can't expose a listing).
+<Directory /var/www/html>
+    DirectorySlash Off
+    Options -Indexes
+</Directory>
 EOF
 
 # Provision LimeSurvey settings once the schema exists (the installer runs
