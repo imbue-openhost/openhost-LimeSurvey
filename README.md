@@ -1,6 +1,6 @@
-# openhost-LimeSurvey
+# bottled-limesurvey
 
-[LimeSurvey](https://github.com/LimeSurvey/LimeSurvey) packaged for OpenHost:
+[LimeSurvey](https://github.com/LimeSurvey/LimeSurvey) packaged for Cloud in a Bottle:
 a single container running LimeSurvey 7 (Apache + PHP, via the
 [martialblog/limesurvey](https://github.com/martialblog/docker-limesurvey)
 image, which builds from the official LimeSurvey release tags) plus a bundled
@@ -9,7 +9,7 @@ MariaDB, since LimeSurvey has no SQLite support.
 ## Deploy
 
 ```bash
-oh app deploy https://github.com/imbue-openhost/openhost-LimeSurvey --wait --instance <instance>
+oh app deploy https://github.com/imbue-openhost/bottled-limesurvey --wait --instance <instance>
 ```
 
 First boot initializes MariaDB and runs LimeSurvey's CLI installer (~200
@@ -22,18 +22,18 @@ The app is public (`public_paths = ["/"]`) so anonymous respondents can take
 surveys. The admin panel at `/index.php/admin` (also linked from the app's
 dashboard page) is protected by LimeSurvey's own auth, with owner SSO on top:
 
-- **Owner:** logged into OpenHost, you are signed into the admin panel
+- **Owner:** logged into Cloud in a Bottle, you are signed into the admin panel
   automatically — no LimeSurvey login — and the app root redirects you to the
   admin dashboard (anonymous visitors get the public survey pages there). This works via LimeSurvey's built-in
   `Authwebserver` plugin: the router adds `X-OpenHost-Is-Owner: true` to your
   requests (and strips that header from everyone else's, so it can't be
   spoofed), and Apache maps it to the `OPENHOST_SSO_USER` variable the plugin
   trusts. Note that "Log out" inside LimeSurvey immediately logs you back in;
-  to appear logged out, use a private window or log out of OpenHost.
+  to appear logged out, use a private window or log out of Cloud in a Bottle.
 - **Everyone else:** hitting the admin panel gets LimeSurvey's login form.
   Password auth stays enabled as a fallback and for any additional admin
   users you create. The seeded account is:
-  - **Username:** your OpenHost owner username (`OPENHOST_OWNER_USERNAME`,
+  - **Username:** your Cloud in a Bottle owner username (`OPENHOST_OWNER_USERNAME`,
     `admin` if unset)
   - **Password:** generated on first boot; read it with:
 
